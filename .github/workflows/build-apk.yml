@@ -20,6 +20,16 @@ jobs:
     steps:
       - name: Download LUMEN Studio source
         uses: actions/checkout@v4
+      - name: Verify checked-out project files
+        run: |
+          echo "Branch: $GITHUB_REF"
+          echo "Commit: $GITHUB_SHA"
+          echo "Repository directory:"
+          pwd
+          echo "Files at repository root:"
+          ls -la
+          echo "Finding package.json:"
+          find . -maxdepth 4 -name package.json -print
 
       - name: Install Node.js
         uses: actions/setup-node@v4

@@ -18,55 +18,73 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Download LUMEN Studio source
+      - name: Check out repository
         uses: actions/checkout@v4
-      - name: Verify checked-out project files
-        run: |
-          echo "Branch: $GITHUB_REF"
-          echo "Commit: $GITHUB_SHA"
-          echo "Repository directory:"
-          pwd
-          echo "Files at repository root:"
-          ls -la
-          echo "Finding package.json:"
-          find . -maxdepth 4 -name package.json -print
 
-      - name: Install Node.js
+      - name: Find project directory
+        shell: bash
+        run: |
+          echo "Checking repository contents..."
+          pwd
+          ls -la
+
+          PACKAGE=$(find . -maxdepth 5 \
+            -type f -name package.json \
+            -not -path '*/node_modules/*' \
+            -print -quit)
+
+          if [ -z "$PACKAGE" ]; then
+            echo "::error::No package.json found in the checked-out repository."
+            echo "Check that package.json is committed to this branch."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PACKAGE")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project manifest: $PACKAGE"
+          echo "Project directory: $PROJECT_DIR"
+
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install Java for Android
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Install project dependencies
+      - name: Install dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npm install
 
-      - name: Build LUMEN Studio web app
+      - name: Build web app
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npm run build
 
       - name: Create Android project
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npx cap add android
 
-      - name: Copy app into Android project
+      - name: Sync Android project
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npx cap sync android
 
-      - name: Configure camera and internet permissions
+      - name: Configure permissions
+        working-directory: ${{ env.PROJECT_DIR }}
         run: node scripts/patch-android.mjs
 
-      - name: Compile Android APK
-        working-directory: android
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}/android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload LUMEN Studio APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Lumen-Studio-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
